@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light" />
+<meta name="supported-color-schemes" content="light" />
+<meta name="theme-color" content="#F4F9F7" />
+<meta name="description" content="像发消息一样记录待办，到点轻声提醒你。支持 PWA 安装到桌面与微信小程序。" />
+<title>今天完工了吗 · 对话式待办提醒</title>
+<script>
+/* Capacitor（APK 原生壳）：隐藏网页里模拟的状态栏，避免和系统状态栏重复 */
+if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+  document.documentElement.className += ' native-app';
+}
+</script>
+
+<!-- PWA：安装到主屏幕后以独立 App 形态全屏运行 -->
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="application-name" content="今天完工了吗" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="今天完工了吗" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+<link rel="stylesheet" href="css/base.css" />
+<link rel="stylesheet" href="css/screens.css" />
+<link rel="stylesheet" href="css/pwa.css" />
+</head>
+<body>
+<div class="stage">
+  <div class="stage-title">今天完工了吗 <span>对话式待办提醒 · 移动端交互原型</span></div>
+
+  <div class="phone" id="phone">
+    <div class="phone-status">
+      <span id="statusClock">9:41</span>
+      <span class="status-icons">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9a13 13 0 0 1 18 0M6.5 12.5a8 8 0 0 1 11 0M10 16a3.5 3.5 0 0 1 4 0M12 19.5h.01"/></svg>
+        <svg viewBox="0 0 26 13" aria-hidden="true"><rect x="1" y="1.5" width="20" height="10" rx="3"/><rect x="3" y="3.5" width="14" height="6" rx="1.6" class="fill"/><path d="M23 5v3"/></svg>
+      </span>
+    </div>
+
+    <div class="phone-body">
+      <div class="screens" id="screens">
+
+        <!-- 1. 聊天首页 -->
+        <section class="screen" data-screen="chat" id="screen-chat">
+          <header class="chat-head">
+            <button class="avatar avatar-sm" data-action="openAssistant" id="headAvatar" aria-label="助手档案：自定义 ID / 头像 / 性格" title="自定义助手">🌱</button>
+            <div class="chat-head-meta" data-action="openAssistant" title="自定义助手">
+              <div class="chat-head-name"><span id="headName">小满</span><i class="online-dot"></i></div>
+              <div class="chat-head-sub" id="headSub">温柔提醒 · 随时都在</div>
+            </div>
+            <div class="chat-head-actions">
+              <button class="pill-btn silent-badge" id="silentBadge" data-action="flushSilent" hidden>静默 0</button>
+              <button class="icon-btn" data-action="go" data-to="notify" aria-label="通知设置">
+                <svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 13 6 9z"/><path d="M9.5 18a2.5 2.5 0 0 0 5 0"/></svg>
+              </button>
+            </div>
+          </header>
+          <div class="chat-stream" id="chatStream"></div>
+          <div class="chat-composer">
+            <div class="chips-row" id="chatChips"></div>
+            <div class="composer-bar">
+              <button class="icon-btn" data-action="voiceInput" aria-label="语音输入">
+                <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+              </button>
+              <input id="chatInput" type="text" autocomplete="off" placeholder="说点什么，例如「明天十点提醒我交高数作业」" />
+              <button class="send-btn" data-action="send" aria-label="发送">
+                <svg viewBox="0 0 24 24"><path d="M12 20V5M6 11l6-6 6 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. 待办清单 -->
+        <section class="screen" data-screen="list" id="screen-list">
+          <header class="page-head">
+            <h1>待办</h1>
+            <span class="spacer"></span>
+            <button class="icon-btn" data-action="newTask" aria-label="新建任务">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </header>
+          <div class="seg" id="listSeg">
+            <button data-filter="today" class="active">今天</button>
+            <button data-filter="week">本周</button>
+            <button data-filter="all">全部</button>
+            <button data-filter="done">已完成</button>
+          </div>
+          <div class="screen-body" id="listBody"></div>
+        </section>
+
+        <!-- 3. 数据复盘 -->
+        <section class="screen" data-screen="review" id="screen-review">
+          <header class="page-head">
+            <h1>复盘</h1>
+            <span class="spacer"></span>
+            <button class="pill-btn" data-action="genReview">让助手解读</button>
+          </header>
+          <div class="screen-body" id="reviewBody"></div>
+        </section>
+
+        <!-- 4. 我的 / 设置 -->
+        <section class="screen" data-screen="settings" id="screen-settings">
+          <header class="page-head">
+            <h1>我的</h1>
+          </header>
+          <div class="screen-body" id="settingsBody"></div>
+        </section>
+
+        <!-- 5. 人设与语气 -->
+        <section class="screen sub" data-screen="persona" id="screen-persona">
+          <header class="page-head">
+            <button class="icon-btn" data-action="back" aria-label="返回">
+              <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+            </button>
+            <h1>助手人设</h1>
+          </header>
+          <div class="screen-body" id="personaBody"></div>
+        </section>
+
+        <!-- 6. 免打扰与通知 -->
+        <section class="screen sub" data-screen="notify" id="screen-notify">
+          <header class="page-head">
+            <button class="icon-btn" data-action="back" aria-label="返回">
+              <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+            </button>
+            <h1>通知与免打扰</h1>
+          </header>
+          <div class="screen-body" id="notifyBody"></div>
+        </section>
+
+        <!-- 7. 任务详情 / 编辑 -->
+        <section class="screen sub" data-screen="task" id="screen-task">
+          <header class="page-head">
+            <button class="icon-btn" data-action="back" aria-label="返回">
+              <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+            </button>
+            <h1 id="taskHeadTitle">任务详情</h1>
+            <span class="spacer"></span>
+            <button class="pill-btn danger" data-action="deleteTask">删除</button>
+          </header>
+          <div class="screen-body" id="taskBody"></div>
+        </section>
+
+        <!-- 8. 关于 / 权限清单 -->
+        <section class="screen sub" data-screen="about" id="screen-about">
+          <header class="page-head">
+            <button class="icon-btn" data-action="back" aria-label="返回">
+              <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+            </button>
+            <h1>权限与说明</h1>
+          </header>
+          <div class="screen-body" id="aboutBody"></div>
+        </section>
+
+      </div>
+
+      <nav class="tabbar" id="tabbar">
+        <button data-tab="chat" class="active">
+          <svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 9 9 0 0 1-3.8-.8L4 20.5l1.4-4.6a8.3 8.3 0 0 1-1.4-4.6A8.4 8.4 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5z"/></svg>
+          <span>对话</span>
+        </button>
+        <button data-tab="list">
+          <svg viewBox="0 0 24 24"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4 6.2l1.4 1.4L7.8 5"/><path d="M4 11.7l1.4 1.4L7.8 10.5"/><circle cx="5.4" cy="17.6" r="1.2"/></svg>
+          <span>清单</span>
+        </button>
+        <button data-tab="review">
+          <svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/></svg>
+          <span>复盘</span>
+        </button>
+        <button data-tab="settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20a7.4 7.4 0 0 1 14.4 0"/></svg>
+          <span>我的</span>
+        </button>
+      </nav>
+
+      <div class="layer" id="layer"></div>
+    </div>
+  </div>
+
+  <div class="stage-foot">桌面端显示手机外框，手机浏览器自动全屏 · 数据保存在本机浏览器</div>
+</div>
+
+<noscript><p style="text-align:center">此原型需要开启 JavaScript。</p></noscript>
+
+<script src="js/store.js"></script>
+<script src="js/persona.js"></script>
+<script src="js/nlu.js"></script>
+<script src="js/reminder.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/views.js"></script>
+<script src="js/app.js"></script>
+
+<script>
+  /* PWA：只在 http(s) 下注册 Service Worker；file:// 双击打开时自动跳过 */
+  if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('./sw.js').catch(function () { /* 离线能力不影响主流程 */ });
+    });
+  }
+</script>
+</body>
+</html>
