@@ -72,6 +72,7 @@
     }
     if (window.Voice) Voice.speak(built.text, built.persona.id);
     if (navigator.vibrate) { try { navigator.vibrate([40, 60, 40]); } catch (e) { /* ignore */ } }
+    if (window.NativeNotify) NativeNotify.remind(task, built.text);
     updateSilentBadge();
   }
 
@@ -164,6 +165,7 @@
       }
       if (window.App && App.showReminder) App.showReminder(task, last.kind, built.text, built.persona);
       if (window.Voice) Voice.speak(built.text, built.persona.id);
+      if (window.NativeNotify) NativeNotify.remind(task, built.text);
     }
     updateSilentBadge();
     return queue.length;
