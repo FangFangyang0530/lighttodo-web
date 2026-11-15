@@ -658,6 +658,15 @@
       case 'notifyExact':
         if (window.NativeNotify) NativeNotify.openExactSettings();
         break;
+      case 'notifyAppSettings':
+        if (window.NativeNotify) NativeNotify.openAppSettings();
+        break;
+      case 'notifyBattery':
+        if (window.NativeNotify) {
+          NativeNotify.requestIgnoreBattery();
+          App.toast('允许「忽略电池优化」后提醒会更准');
+        }
+        break;
       case 'installApp': App.installApp(); break;
       case 'closeSheet': closeReminder(); break;
       case 'obNext': obStep = Math.min(obStep + 1, OB_STEPS.length - 1); renderOnboarding(); break;
