@@ -384,6 +384,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round
   z-index: 20;
 }
 .tabbar.hidden { display: none; }
+/* 对话页输入中（软键盘弹起）收起底部导航，键盘关闭后由 js 去掉该类 */
+body.kb-open .tabbar { display: none !important; }
+body.kb-open .chat-composer { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
 .tabbar button {
   flex: 1;
   border: none;
