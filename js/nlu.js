@@ -214,7 +214,38 @@
 
   function targetOf(input) {
     // 「完成了 / 写完了」必须排在「完成 / 写完」前，否则会残留一个「了」字
-    return extractTitle(input.replace(/(完成了|做完了|写完了|搞定了|弄完了|写好了|完成|做完|写好|搞定|弄完|交了|打卡|延后|推迟|晚点|再给|往后|暂停一下|暂停|别提醒了|恢复提醒|继续提醒|改到|改成|调到|延到|换到|定在|把|帮我|一下)/g, ' '));
+    return extractTitle(input.replace(/(不重复|只提醒一次|取消重复|提前提醒|提醒提前|提前|完成了|做完了|写完了|搞定了|弄完了|写好了|完成|做完|写好|搞定|弄完|交了|打卡|延后|推迟|晚点|再给|往后|暂停一下|暂停|别提醒了|恢复提醒|继续提醒|改到|改成|调到|延到|换到|定在|删除|删掉|删了|移除|去掉|清除|清掉|把|帮我|一下)/g, ' '))
+      .replace(/(这个|这条|那个|的)?(任务|待办)$/, '')
+      .replace(/^的/, '');
+  }
+
+  /** 解析「改名」：返回旧名与新名，解析不出返回 null */
+  function parseRename(s) {
+    // 「不重复 / 每天 / 30 分钟」这类是频次或提醒时间，不是新名字
+    function looksLikeName(t) {
+      if (!t) return false;
+      if (/^(不重复|只提醒一次|取消重复|每天|每日|天天|工作日|每月|每周[一二三四五六日天]*)$/.test(t)) return false;
+      if (/^(\d{1,3}|[一二两三四五六七八九十]{1,3})\s*(分钟|分|小时)$/.test(t)) return false;
+      return true;
+    }
+    let m = s.match(/(?:把|将)?\s*(.+?)\s*(?:重命名|改名|改叫|改称|换个名字|换名字)\s*(?:为|成|作|叫)?\s*(.+)/);
+    if (!m) m = s.match(/(?:把|将)?\s*(.+?)\s*(?:的)?(?:名字|名称)\s*(?:改成|改为|换成|叫)\s*(.+)/);
+    if (!m) {
+      // 「旧名改成新名」：新名里没有具体时刻 / 日期时按改名处理
+      const g = s.match(/^(?:把|将)?\s*(.+?)\s*(?:改成|改为|换成)\s*(.+)$/);
+      if (g && !/(\d{1,2}\s*[点時时]|\d{1,2}\s*:\s*\d{1,2})/.test(g[2]) &&
+          !/(明天|后天|明早|明晚|今晚|下周|这周|周[一二三四五六日天]|星期|月\s*\d|\d\s*[日号])/.test(g[2])) m = g;
+    }
+    if (!m) return null;
+    const target = targetOf(m[1]);
+    // 新名字保留用户原话（只清标点与语气词），避免「早上背单词」被当成时间词刮掉
+    const newTitle = normalize(m[2])
+      .replace(/[，,。.、；;：:！!？?~～"'“”‘’()（）【】\[\]]/g, ' ')
+      .replace(/\s+/g, '')
+      .replace(/^(为|成|作|叫)/, '')
+      .replace(/(吧|啊|呀|哦|呢|嘛|哈|啦|了|一下)+$/, '');
+    if (!target || !looksLikeName(newTitle)) return null;
+    return { target: target, newTitle: newTitle };
   }
 
   /* ------------------------------ 语气 / 重复 ------------------------------ */
@@ -238,6 +269,9 @@
   function detectRepeat(s) {
     let repeat = 'none';
     const days = [];
+    // 「每周一三五改成每周二四」：频次以「改成」之后的新说法为准
+    const parts = s.split(/(?:改成|改为|换成|调整成|调成|设成|变成)/);
+    if (parts.length > 1) s = parts[parts.length - 1];
     if (/(每天|每日|天天|每一天)/.test(s)) repeat = 'daily';
     if (/(工作日|周一到周五|周一至周五|上课日)/.test(s)) repeat = 'workday';
     if (/(每月|每个月)/.test(s)) repeat = 'monthly';
@@ -302,6 +336,46 @@
     if (/(复盘|统计|完成率|周报|报表|数据|总结|我最近|表现如何|进度如何)/.test(s)) {
       out.intent = 'review';
       return out;
+    }
+
+    /* 删除任务 */
+    if (/(删除|删掉|删了|移除|去掉|清除|清掉|不要这个任务|取消这个任务)/.test(s) && !/(提醒我|记得|帮我记)/.test(s)) {
+      out.intent = 'delete';
+      out.target = targetOf(s);
+      return out;
+    }
+
+    /* 改名 */
+    const rn = parseRename(s);
+    if (rn) {
+      out.intent = 'rename';
+      out.target = rn.target;
+      out.newTitle = rn.newTitle;
+      return out;
+    }
+
+    /* 修改重复频次 / 提前提醒分钟数 */
+    if (/(不重复|只提醒一次|取消重复)/.test(s) && /(改成|改为|换成|调整|设置|设成|变成|频次|频率)/.test(s)) {
+      out.intent = 'repeat';
+      out.target = targetOf(s);
+      out.repeat = 'none';
+      out.repeatDays = [];
+      return out;
+    }
+    if (rep.repeat !== 'none' && /(改成|改为|换成|调整|设置|设成|变成|频次|频率|重复)/.test(s)) {
+      out.intent = 'repeat';
+      out.target = targetOf(s);
+      return out;
+    }
+    const pm = s.match(/提前(?:提醒)?\s*(?:的时间|时间|分钟数)?\s*(?:改成|改为|换成|调整成|调成|设为|设成|变成|为|到)?\s*(\d{1,3}|[一二两三四五六七八九十]{1,3})\s*分钟/);
+    if (pm && /(改成|改为|换成|调整|设置|设成|变成|频次|频率|提醒提前|提前)/.test(s)) {
+      const n = cn2num(pm[1]);
+      if (!isNaN(n)) {
+        out.intent = 'pre';
+        out.target = targetOf(s);
+        out.preMin = Math.max(0, Math.min(120, n));
+        return out;
+      }
     }
 
     /* 暂停 / 恢复 */
@@ -397,6 +471,7 @@
     normalize: normalize,
     cn2num: cn2num,
     detectTone: detectTone,
-    detectRepeat: detectRepeat
+    detectRepeat: detectRepeat,
+    parseRename: parseRename
   };
 })();
