@@ -55,8 +55,22 @@
   /* ------------------------------ 任务快照 ------------------------------ */
   function taskSnapshot() {
     return Store.tasks.map(function (t) {
-      return { id: t.id, dueAt: t.dueAt || 0, status: t.status, paused: !!t.paused };
+      return {
+        id: t.id,
+        title: t.title || '',
+        dueAt: t.dueAt || 0,
+        status: t.status,
+        paused: !!t.paused
+      };
     });
+  }
+
+  /** 通知里的发送者：当前助手名，没初始化时用「小满」 */
+  function personaName() {
+    try {
+      if (window.Persona && Persona.current) return Persona.current().name || '小满';
+    } catch (e) { }
+    return '小满';
   }
 
   /** 把任务快照交给原生层：App 关闭、跨天、闹钟到点时系统自己也能算角标 */
@@ -73,8 +87,8 @@
     posted[task.id] = 1;
     call('showReminder', {
       id: task.id,
-      title: '今天完工了吗',
-      body: text || task.title || '有一条待办到点了',
+      title: personaName(),
+      body: text || ('待办提醒：' + (task.title || '有一条待办到点了')),
       count: todayCount()
     });
   }
@@ -89,6 +103,7 @@
   function buildSchedule() {
     const now = Date.now();
     const count = todayCount();
+    const who = personaName();
     const items = [];
     Store.tasks.forEach(function (t) {
       if (!t.dueAt || t.status !== 'pending' || t.paused) return;
@@ -100,8 +115,8 @@
         items.push({
           id: t.id + '#pre' + p,
           at: at,
-          title: '今天完工了吗',
-          body: '「' + t.title + '」还有 ' + p + ' 分钟到期',
+          title: who,
+          body: '待办提醒：「' + t.title + '」还有 ' + p + ' 分钟到期',
           count: count
         });
       });
@@ -110,8 +125,8 @@
         items.push({
           id: t.id + '#due',
           at: t.dueAt,
-          title: '今天完工了吗',
-          body: '「' + t.title + '」到点了，去完成它',
+          title: who,
+          body: '待办提醒：「' + t.title + '」到点了，去完成它',
           count: count
         });
       }
@@ -230,6 +245,16 @@
     openExactSettings: function () { return call('openExactSettings'); },
     openAppSettings: function () { return call('openAppSettings'); },
     requestIgnoreBattery: function () { return call('requestIgnoreBattery'); },
+    pinWidget: function () {
+      const p = plugin();
+      if (!p || typeof p.pinWidget !== 'function') return Promise.resolve(null);
+      try {
+        return p.pinWidget({}).catch(function () { return { ok: false }; });
+      } catch (e) {
+        return Promise.resolve({ ok: false });
+      }
+    },
+    updateWidget: function () { return call('updateWidget'); },
     _buildSchedule: buildSchedule
   };
 
