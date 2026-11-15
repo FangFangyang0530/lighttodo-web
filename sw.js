@@ -4,7 +4,7 @@
    =========================================================== */
 'use strict';
 
-const VERSION = 'lighttodo-v8';
+const VERSION = 'lighttodo-v9';
 const SHELL = [
   './',
   './index.html',
