@@ -24,7 +24,7 @@
   }
 
   let isNative = !!plugin();
-  let cfg = { bar: true, headsUp: true, lock: true, badge: true, sound: 'default', customName: '', granted: true, exact: true };
+  let cfg = { bar: true, headsUp: true, lock: true, badge: true, sound: 'default', customName: '', granted: true, exact: true, batteryOpt: false };
   let lastBadge = -1;
   let posted = {};
   let schedTimer = null;
@@ -50,6 +50,20 @@
     if (!force && n === lastBadge) return;
     lastBadge = n;
     call('setBadge', { count: n });
+  }
+
+  /* ------------------------------ 任务快照 ------------------------------ */
+  function taskSnapshot() {
+    return Store.tasks.map(function (t) {
+      return { id: t.id, dueAt: t.dueAt || 0, status: t.status, paused: !!t.paused };
+    });
+  }
+
+  /** 把任务快照交给原生层：App 关闭、跨天、闹钟到点时系统自己也能算角标 */
+  function syncTasks() {
+    if (!isNative || !window.Store) return;
+    lastBadge = todayCount();
+    call('syncTasks', { tasks: taskSnapshot() });
   }
 
   /* ------------------------------ 提醒通知 ------------------------------ */
@@ -127,7 +141,7 @@
       else pending.push(id);
     });
     call('prune', { pending: pending });
-    syncBadge();
+    syncTasks();
     scheduleSoon();
   }
 
@@ -181,7 +195,7 @@
     isNative = true;
     refreshConfig().then(function () {
       ensurePermission();
-      syncBadge(true);
+      syncTasks();
       syncSchedule();
       setTimeout(syncSchedule, 4000);
     });
@@ -190,7 +204,7 @@
   // 回到前台时重算角标与闹钟，避免被系统冻结后计划过期
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState !== 'visible' || !isNative) return;
-    syncBadge(true);
+    syncTasks();
     scheduleSoon();
   });
 
@@ -202,6 +216,7 @@
     remind: remind,
     cancel: cancel,
     syncBadge: syncBadge,
+    syncTasks: syncTasks,
     syncSchedule: syncSchedule,
     onTasksChanged: onTasksChanged,
     refreshConfig: refreshConfig,
@@ -213,6 +228,8 @@
     test: function () { return call('testNotification', { count: todayCount() }); },
     openSystemSettings: function () { return call('openNotificationSettings'); },
     openExactSettings: function () { return call('openExactSettings'); },
+    openAppSettings: function () { return call('openAppSettings'); },
+    requestIgnoreBattery: function () { return call('requestIgnoreBattery'); },
     _buildSchedule: buildSchedule
   };
 
