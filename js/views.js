@@ -500,6 +500,10 @@
           (nc.granted === false ? '<div class="form-row"><div><div class="fr-label">通知权限未开启</div><div class="fr-sub">在系统里允许通知，提醒才能显示</div></div><button class="btn btn-ghost" data-action="notifySettings">去开启</button></div>' : '') +
           (nc.exact === false ? '<div class="form-row"><div><div class="fr-label">精确闹钟未授权</div><div class="fr-sub">未授权时提醒可能延迟几分钟</div></div><button class="btn btn-ghost" data-action="notifyExact">去授权</button></div>' : '') +
         '</div>' +
+        '<div class="section-label">桌面小组件</div>' +
+        '<div class="group">' +
+          '<div class="form-row"><div><div class="fr-label">今日待办小组件</div><div class="fr-sub">在桌面显示今天未完成的待办与对应时间，任务变化会自动刷新</div></div><button class="btn btn-ghost" data-action="pinWidget">添加到桌面</button></div>' +
+        '</div>' +
         '<div class="section-label">提醒铃声</div>' +
         '<div class="group">' +
           '<div class="time-range" style="gap:6px;flex-wrap:wrap">' +
@@ -833,7 +837,7 @@
     let cur = null;
     lines.forEach(function (line) {
       const upper = line.trim().toUpperCase();
-      if (upper === 'BEGIN:VEVENT') { cur = {}; return; }
+      if (upper === 'BEGIN:VEVENT') { cur = { exdates: [] }; return; }
       if (upper === 'END:VEVENT') {
         if (cur && cur.dtstart && cur.summary) events.push(cur);
         cur = null;
@@ -846,15 +850,61 @@
       const key = head[0].toUpperCase();
       const params = head.slice(1).join(';').toUpperCase();
       const val = line.slice(sep + 1);
+      const dateOnly = /VALUE=DATE(;|$)/.test(params);
       if (key === 'SUMMARY') cur.summary = icsUnescape(val);
-      else if (key === 'DTSTART') cur.dtstart = icsParseDate(val, /VALUE=DATE(;|$)/.test(params));
-      else if (key === 'RRULE') cur.rrule = val.trim();
+      else if (key === 'UID') cur.uid = String(val).trim();
+      else if (key === 'DTSTART') { cur.dtstart = icsParseDate(val, dateOnly); cur.allDay = dateOnly; }
+      else if (key === 'RRULE') cur.rrule = String(val).trim();
+      else if (key === 'EXDATE') {
+        String(val).split(',').forEach(function (v) {
+          const ts = icsParseDate(v, dateOnly);
+          if (ts) cur.exdates.push(ts);
+        });
+      }
+      else if (key === 'RECURRENCE-ID') cur.recurrenceId = icsParseDate(val, dateOnly);
+      else if (key === 'STATUS') cur.status = String(val || '').trim().toUpperCase();
       else if (key === 'LOCATION') cur.location = icsUnescape(val);
     });
     return events;
   }
 
-  /** 展开未来 14 天内的日程（重复日程按 RRULE 展开），并与已导入的同类任务去重 */
+  /**
+   * 解析 RRULE。只认能精确展开的规则（DAILY / WEEKLY / MONTHLY + INTERVAL / COUNT / UNTIL / BYDAY）
+   * 其它规则（BYSETPOS/BYMONTH/BYWEEKNO…）标记为 unsupported，调用方只导入 DTSTART 这一次真实存在的日程。
+   */
+  function icsRule(rrule) {
+    const txt = String(rrule || '').toUpperCase().trim();
+    if (!txt) return null;
+    const get = function (k) {
+      const m = new RegExp('(?:^|;)' + k + '=([^;]+)').exec(txt);
+      return m ? m[1] : '';
+    };
+    const rule = {
+      freq: get('FREQ'),
+      interval: Math.max(1, parseInt(get('INTERVAL'), 10) || 1),
+      count: parseInt(get('COUNT'), 10) || 0,
+      until: 0,
+      byday: [],
+      bymonthday: parseInt(get('BYMONTHDAY'), 10) || 0,
+      unsupported: /(BYSETPOS|BYMONTH=|BYWEEKNO|BYYEARDAY|BYHOUR|BYMINUTE|BYSECOND)/.test(txt)
+    };
+    const untilRaw = get('UNTIL');
+    if (untilRaw) rule.until = icsParseDate(untilRaw, /^\d{8}$/.test(untilRaw)) || 0;
+    const bydayRaw = get('BYDAY');
+    if (bydayRaw) {
+      rule.byday = bydayRaw.split(',').map(function (d) {
+        return ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].indexOf(String(d).replace(/^[+-]?\d+/, ''));
+      }).filter(function (d) { return d >= 0; });
+    }
+    if (['DAILY', 'WEEKLY', 'MONTHLY'].indexOf(rule.freq) < 0) rule.unsupported = true;
+    return rule;
+  }
+
+  /**
+   * 展开未来 14 天内的日程（重复日程按 RRULE 展开），并与已导入的同类任务去重。
+   * 只生成真实存在的日程：遵守 INTERVAL / COUNT / UNTIL / EXDATE / STATUS:CANCELLED，
+   * RECURRENCE-ID 例外只取移动后的时间，不会把被取消的实例导入。
+   */
   function icsExpand(events) {
     const now = Date.now();
     const from = now - 5 * U.MIN;
@@ -862,36 +912,101 @@
     const existing = Store.tasks.filter(function (t) { return t.source === 'calendar'; });
     const out = [];
     const seen = {};
+    const sameTime = function (a, b) { return Math.abs(a - b) < 60 * 1000; };
 
+    const push = function (title, ts, allDay) {
+      if (!ts || ts < from || ts > to) return;
+      const key = title + '|' + ts;
+      if (seen[key]) return;
+      if (existing.some(function (t) { return t.title === title && sameTime(t.dueAt || 0, ts); })) return;
+      seen[key] = 1;
+      out.push({ title: title, dueAt: ts, repeat: 'none', allDay: !!allDay });
+    };
+
+    // 同一 UID 的主日程与「例外实例」放在一起处理，才能正确删/改单个实例
+    const groups = {};
     events.forEach(function (ev) {
-      const rule = /^FREQ=(DAILY|WEEKLY)/i.test(ev.rrule || '') ? String(ev.rrule).toUpperCase() : '';
-      const untilM = /UNTIL=([0-9TZ]+)/.exec(rule);
-      const until = untilM ? (icsParseDate(untilM[1], /^\d{8}$/.test(untilM[1])) || 0) : 0;
-      const bydayM = /BYDAY=([A-Z,]+)/.exec(rule);
-      const byday = bydayM ? bydayM[1].split(',').map(function (d) {
-        return ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].indexOf(d);
-      }).filter(function (d) { return d >= 0; }) : [];
-      const daily = /FREQ=DAILY/.test(rule);
-      const weekly = /FREQ=WEEKLY/.test(rule);
-      const startDay = U.startOfDay(ev.dtstart);
-      const timeOfDay = ev.dtstart - startDay;
+      const key = ev.uid || ('~' + ev.summary + '|' + ev.dtstart);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(ev);
+    });
 
-      const push = function (ts) {
-        if (ts < from || ts > to) return;
-        const key = ev.summary + '|' + ts;
-        if (seen[key]) return;
-        if (existing.some(function (t) { return t.title === ev.summary && Math.abs((t.dueAt || 0) - ts) < U.MIN; })) return;
-        seen[key] = 1;
-        out.push({ title: ev.summary, dueAt: ts, repeat: daily ? 'daily' : (weekly ? 'weekly' : 'none') });
+    Object.keys(groups).forEach(function (uid) {
+      const group = groups[uid];
+      const master = group.filter(function (e) { return !e.recurrenceId; })[0] ||
+        group.filter(function (e) { return e.status !== 'CANCELLED'; })[0];
+      if (!master || master.status === 'CANCELLED') return;   // 整条日程已被取消
+      if (!master.dtstart || !master.summary) return;
+
+      const blocked = (master.exdates || []).slice();
+      const moved = [];
+      group.forEach(function (ev) {
+        if (!ev.recurrenceId) return;
+        if (ev.status === 'CANCELLED') blocked.push(ev.recurrenceId);
+        else if (ev.dtstart) moved.push({ at: ev.recurrenceId, to: ev.dtstart });
+      });
+      const isBlocked = function (ts) { return blocked.some(function (x) { return sameTime(x, ts); }); };
+      const moveTo = function (ts) {
+        const hit = moved.filter(function (m) { return sameTime(m.at, ts); })[0];
+        return hit ? hit.to : 0;
       };
 
-      if (!rule) { push(ev.dtstart); return; }
-      for (let i = 0, day = startDay; day <= to && i < 120; i++, day += U.DAY) {
-        const ts = day + timeOfDay;
-        if (until && ts > until) break;
-        const wd = new Date(day).getDay();
-        const weekMatch = byday.length ? byday.indexOf(wd) >= 0 : ((day - startDay) / U.DAY) % 7 === 0;
-        if (daily ? (!byday.length || byday.indexOf(wd) >= 0) : (weekly && weekMatch)) push(ts);
+      const rule = icsRule(master.rrule);
+      if (!rule || rule.unsupported) {
+        // 保守：只导入 DTSTART 这一个确实存在的日程
+        push(master.summary, master.dtstart, master.allDay);
+        return;
+      }
+
+      const startDay = U.startOfDay(master.dtstart);
+      const timeOfDay = master.dtstart - startDay;
+      const startDow = new Date(startDay).getDay();
+      const startDom = new Date(master.dtstart).getDate();
+      const cands = [];
+      const cap = 1200;
+
+      if (rule.freq === 'DAILY') {
+        for (let i = 0; cands.length < cap; i++) {
+          const day = startDay + i * rule.interval * U.DAY;
+          if (day > to) break;
+          if (rule.byday.length && rule.byday.indexOf(new Date(day).getDay()) < 0) continue;
+          cands.push(day + timeOfDay);
+        }
+      } else if (rule.freq === 'WEEKLY') {
+        const days = rule.byday.length ? rule.byday : [startDow];
+        for (let w = 0; cands.length < cap; w++) {
+          if (startDay + w * 7 * U.DAY > to + 7 * U.DAY) break;
+          if (w % rule.interval !== 0) continue;   // 每两周：只展开隔周
+          for (let k = 0; k < 7; k++) {
+            const day = startDay + (w * 7 + k) * U.DAY;
+            if (days.indexOf(new Date(day).getDay()) < 0) continue;
+            const ts = day + timeOfDay;
+            if (ts < master.dtstart) continue;
+            cands.push(ts);
+          }
+        }
+      } else {
+        const d = new Date(master.dtstart);
+        for (let i = 0; cands.length < cap; i++) {
+          const m0 = new Date(d.getFullYear(), d.getMonth() + i * rule.interval, 1);
+          if (m0.getTime() > to + 31 * U.DAY) break;
+          const dom = rule.bymonthday || startDom;
+          const cand = new Date(m0.getFullYear(), m0.getMonth(), dom);
+          if (cand.getDate() !== dom) continue;   // 2 月没有 30 号这类月份跳过
+          cands.push(cand.getTime() + timeOfDay);
+        }
+      }
+
+      cands.sort(function (a, b) { return a - b; });
+      let used = 0;
+      for (let i = 0; i < cands.length; i++) {
+        const ts = cands[i];
+        if (rule.until && ts > rule.until) break;
+        if (rule.count && used >= rule.count) break;   // COUNT 含已过去的实例
+        used++;
+        if (isBlocked(ts)) continue;
+        const target = moveTo(ts);
+        push(master.summary, target || ts, master.allDay);
       }
     });
 
@@ -1067,7 +1182,7 @@
     icsSourceLabel = sourceLabel || '';
     icsRawLabel = rawLabel || '从日历导入';
     const rows = items.map(function (it, i) {
-      const meta = [U.fmtDue(it.dueAt), it.repeat === 'daily' ? '每天' : (it.repeat === 'weekly' ? '每周' : ''), it.where]
+      const meta = [U.fmtDue(it.dueAt), it.allDay ? '全天日程' : '', it.where]
         .filter(Boolean).join(' · ');
       return '<label class="ics-item">' +
         '<input type="checkbox" class="ics-check" data-idx="' + i + '" checked>' +
@@ -1100,7 +1215,10 @@
       Store.addTask({
         title: it.title,
         dueAt: it.dueAt,
-        repeat: it.repeat,
+        // 导入的每条都是一次真实存在的日程实例，不能再带重复规则，
+        // 否则完成后再生成日历里并不存在的未来日程
+        repeat: 'none',
+        repeatDays: [],
         tone: 'minimal',
         pre: [15],
         source: 'calendar',
