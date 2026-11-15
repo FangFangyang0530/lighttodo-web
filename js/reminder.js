@@ -78,6 +78,8 @@
 
   function updateSilentBadge() {
     if (window.App && App.updateSilentBadge) App.updateSilentBadge();
+    // tick 每秒调用一次；内部只在数量变化时才通知原生，跨天会自动归零
+    if (window.NativeNotify) NativeNotify.syncBadge();
   }
 
   /* ------------------------------ 主循环 ------------------------------ */
