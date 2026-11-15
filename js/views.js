@@ -495,6 +495,8 @@
           '<div class="form-row"><div><div class="fr-label">顶部横幅</div><div class="fr-sub">提醒到达时从屏幕顶部弹出</div></div><label class="switch"><input type="checkbox" id="swNotifyHeadsUp"' + (nc.headsUp ? ' checked' : '') + '><span></span></label></div>' +
           '<div class="form-row"><div><div class="fr-label">锁屏显示</div><div class="fr-sub">锁屏界面显示提醒内容</div></div><label class="switch"><input type="checkbox" id="swNotifyLock"' + (nc.lock ? ' checked' : '') + '><span></span></label></div>' +
           '<div class="form-row"><div><div class="fr-label">桌面图标角标</div><div class="fr-sub">图标旁显示今天未完成的数量</div></div><label class="switch"><input type="checkbox" id="swNotifyBadge"' + (nc.badge ? ' checked' : '') + '><span></span></label></div>' +
+                    '<div class="form-row"><div><div class="fr-label">自启动与后台运行</div><div class="fr-sub">允许自启动、后台运行，App 没打开也能收到提醒</div></div><button class="btn btn-ghost" data-action="notifyAppSettings">去设置</button></div>' +
+                    '<div class="form-row"><div><div class="fr-label">电池优化</div><div class="fr-sub">' + (nc.batteryOpt ? '已关闭电池优化，后台提醒稳定' : '未关闭，部分手机会延迟或拦截提醒') + '</div></div><button class="btn btn-ghost" data-action="notifyBattery">去关闭</button></div>' +
           (nc.granted === false ? '<div class="form-row"><div><div class="fr-label">通知权限未开启</div><div class="fr-sub">在系统里允许通知，提醒才能显示</div></div><button class="btn btn-ghost" data-action="notifySettings">去开启</button></div>' : '') +
           (nc.exact === false ? '<div class="form-row"><div><div class="fr-label">精确闹钟未授权</div><div class="fr-sub">未授权时提醒可能延迟几分钟</div></div><button class="btn btn-ghost" data-action="notifyExact">去授权</button></div>' : '') +
         '</div>' +
