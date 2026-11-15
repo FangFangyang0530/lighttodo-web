@@ -483,6 +483,36 @@
     const s = Store.settings;
     const dnd = s.dnd;
 
+    // 仅安卓 App：系统通知位置、铃声与角标
+    let nativeHtml = '';
+    if (window.NativeNotify && NativeNotify.isNative) {
+      const nc = NativeNotify.cfg || {};
+      const sounds = [['default', '默认通知音'], ['ringtone', '来电铃声'], ['alarm', '闹钟声'], ['none', '静音'], ['custom', '自定义']];
+      nativeHtml =
+        '<div class="section-label">系统通知（仅 App）</div>' +
+        '<div class="group">' +
+          '<div class="form-row"><div><div class="fr-label">通知栏显示</div><div class="fr-sub">在下拉通知栏里显示提醒</div></div><label class="switch"><input type="checkbox" id="swNotifyBar"' + (nc.bar ? ' checked' : '') + '><span></span></label></div>' +
+          '<div class="form-row"><div><div class="fr-label">顶部横幅</div><div class="fr-sub">提醒到达时从屏幕顶部弹出</div></div><label class="switch"><input type="checkbox" id="swNotifyHeadsUp"' + (nc.headsUp ? ' checked' : '') + '><span></span></label></div>' +
+          '<div class="form-row"><div><div class="fr-label">锁屏显示</div><div class="fr-sub">锁屏界面显示提醒内容</div></div><label class="switch"><input type="checkbox" id="swNotifyLock"' + (nc.lock ? ' checked' : '') + '><span></span></label></div>' +
+          '<div class="form-row"><div><div class="fr-label">桌面图标角标</div><div class="fr-sub">图标旁显示今天未完成的数量</div></div><label class="switch"><input type="checkbox" id="swNotifyBadge"' + (nc.badge ? ' checked' : '') + '><span></span></label></div>' +
+          (nc.granted === false ? '<div class="form-row"><div><div class="fr-label">通知权限未开启</div><div class="fr-sub">在系统里允许通知，提醒才能显示</div></div><button class="btn btn-ghost" data-action="notifySettings">去开启</button></div>' : '') +
+          (nc.exact === false ? '<div class="form-row"><div><div class="fr-label">精确闹钟未授权</div><div class="fr-sub">未授权时提醒可能延迟几分钟</div></div><button class="btn btn-ghost" data-action="notifyExact">去授权</button></div>' : '') +
+        '</div>' +
+        '<div class="section-label">提醒铃声</div>' +
+        '<div class="group">' +
+          '<div class="time-range" style="gap:6px;flex-wrap:wrap">' +
+            sounds.map(function (o) {
+              return '<button class="chip' + (nc.sound === o[0] ? ' active' : '') + '" data-action="notifySound" data-key="' + o[0] + '">' + o[1] + '</button>';
+            }).join('') +
+          '</div>' +
+          '<div class="form-row"><div><div class="fr-label">自定义铃声</div><div class="fr-sub">' + (nc.customName ? '当前：' + esc(nc.customName) : '从手机里选一首音频（8MB 以内）') + '</div></div><button class="btn btn-ghost" data-action="notifyPickCustom">选择文件</button></div>' +
+          '<div class="form-row"><div><div class="fr-label">试听铃声</div><div class="fr-sub">按当前选择播放 4 秒</div></div><button class="btn btn-ghost" data-action="notifyPreview">试听</button></div>' +
+        '</div>' +
+        '<input type="file" id="customSoundFile" accept="audio/*" hidden>' +
+        '<div class="section-label">测试</div>' +
+        '<button class="btn" data-action="notifyTest">发一条测试通知</button>';
+    }
+
     body.innerHTML = '' +
       '<div class="hint-card"><span class="hi">🛡</span><div>提醒优先走「本地通知 + 系统闹钟通道」，即使后台被清理也能尽量送达；免打扰时段的提醒会静默保存，结束后一次性补发。</div></div>' +
 
@@ -536,6 +566,7 @@
           '<div class="row-arrow"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div></div>' +
       '</div>' +
 
+      nativeHtml +
       '<div class="section-label">演示</div>' +
       '<button class="btn" data-action="demoTask">10 秒后弹一条提醒（演示用）</button>';
 
@@ -548,6 +579,39 @@
       Store.save();
       App.toast(v ? '已开启闹钟兜底（原生版生效）' : '已关闭闹钟兜底');
     });
+
+    if (window.NativeNotify && NativeNotify.isNative) {
+      const applyCfg = function (patch) {
+        NativeNotify.setConfig(patch).then(function () {
+          if (window.App && App.toast) App.toast('已保存');
+        });
+      };
+      bindSwitch(body, 'swNotifyBar', function (v) { applyCfg({ bar: v }); });
+      bindSwitch(body, 'swNotifyHeadsUp', function (v) { applyCfg({ headsUp: v }); });
+      bindSwitch(body, 'swNotifyLock', function (v) { applyCfg({ lock: v }); });
+      bindSwitch(body, 'swNotifyBadge', function (v) {
+        applyCfg({ badge: v });
+        NativeNotify.syncBadge(true);
+      });
+      const fileEl = body.querySelector('#customSoundFile');
+      if (fileEl) {
+        fileEl.addEventListener('change', function () {
+          const f = fileEl.files && fileEl.files[0];
+          if (!f) return;
+          if (f.size > 8 * 1024 * 1024) { App.toast('音频文件请小于 8MB'); return; }
+          const reader = new FileReader();
+          reader.onload = function () {
+            const raw = String(reader.result || '');
+            const cut = raw.indexOf(',');
+            NativeNotify.saveCustomSound(f.name, cut >= 0 ? raw.slice(cut + 1) : raw).then(function (res) {
+              if (res && res.ok) { App.toast('已使用自定义铃声'); Views.notify(); }
+              else App.toast('铃声保存失败，换一首试试');
+            });
+          };
+          reader.readAsDataURL(f);
+        });
+      }
+    }
 
     const ds = body.querySelector('#dndStart');
     const de = body.querySelector('#dndEnd');
