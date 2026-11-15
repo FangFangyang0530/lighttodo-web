@@ -152,7 +152,7 @@
         '<div class="rs-head">' +
           '<div class="avatar">' + Persona.avatarHTML(p) + '</div>' +
           '<div class="rs-meta"><b>' + esc(p.name) + (isUrgent ? ' · 严肃模式' : '') + '</b>' +
-            '<small>' + (KIND_LABEL[kind] || '提醒') + ' · ' + esc(U.fmtDue(task.dueAt)) + '</small></div>' +
+            '<small>待办提醒 · ' + (KIND_LABEL[kind] || '提醒') + ' · ' + esc(U.fmtDue(task.dueAt)) + '</small></div>' +
           '<button class="rs-close" data-action="reminderIgnore" data-id="' + task.id + '" aria-label="关闭">✕</button>' +
         '</div>' +
         '<div class="rs-text">' + esc(text).replace(/\n/g, '<br>') + '</div>' +
