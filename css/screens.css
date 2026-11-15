@@ -131,12 +131,26 @@
   border-bottom-right-radius: 6px;
   box-shadow: 0 8px 18px rgba(95, 169, 140, .24);
 }
+/* 待办提醒：琥珀色高亮 + 左侧色条 + 顶部标签，与助手普通对话/完成发言明显分开 */
 .msg.reminder .bubble {
-  background: linear-gradient(160deg, #FFFDF9, #FDF4E9);
-  border: 1px solid #F2E2CD;
+  background: linear-gradient(160deg, #FFF8EC, #FFEFD6);
+  border: 1px solid #F0D3A6;
+  border-left: 3px solid #E8A951;
   border-top-left-radius: 6px;
+  box-shadow: 0 6px 16px rgba(214, 158, 74, .18);
+  color: #5C4B33;
+  font-weight: 500;
 }
-.msg.reminder .msg-avatar { background: linear-gradient(150deg, #FFF, #FDF1E2); border-color: #F2E2CD; }
+.msg.reminder .bubble::before {
+  content: '待办提醒';
+  display: block;
+  font-size: 10px;
+  letter-spacing: .12em;
+  color: #B9803A;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.msg.reminder .msg-avatar { background: linear-gradient(150deg, #FFF6E8, #FBE7C8); border-color: #F0D3A6; }
 
 .msg-time { font-size: 10px; color: #B2C1BC; padding: 0 3px; }
 
@@ -785,6 +799,7 @@
   place-items: center;
   font-weight: 700;
 }
+.ob-link { width: 100%; margin-bottom: 8px; padding: 9px; font-size: 12px; border: 1px dashed #CBE4D8; color: var(--primary-deep); }
 .ob-dots { display: flex; gap: 5px; justify-content: center; margin-bottom: 12px; }
 .ob-dots i { width: 5px; height: 5px; border-radius: 50%; background: #DCE9E3; }
 .ob-dots i.on { background: var(--primary); width: 14px; border-radius: 3px; }
