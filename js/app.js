@@ -636,6 +636,28 @@
         }
         break;
       }
+      case 'notifySound':
+        if (window.NativeNotify) {
+          NativeNotify.setSound(el.dataset.key).then(function () { Views.notify(); });
+        }
+        break;
+      case 'notifyPickCustom': {
+        const f = document.getElementById('customSoundFile');
+        if (f) f.click();
+        break;
+      }
+      case 'notifyPreview':
+        if (window.NativeNotify) NativeNotify.preview();
+        break;
+      case 'notifyTest':
+        if (window.NativeNotify) NativeNotify.test();
+        break;
+      case 'notifySettings':
+        if (window.NativeNotify) NativeNotify.openSystemSettings();
+        break;
+      case 'notifyExact':
+        if (window.NativeNotify) NativeNotify.openExactSettings();
+        break;
       case 'installApp': App.installApp(); break;
       case 'closeSheet': closeReminder(); break;
       case 'obNext': obStep = Math.min(obStep + 1, OB_STEPS.length - 1); renderOnboarding(); break;
