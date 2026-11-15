@@ -273,6 +273,13 @@
     }, 80);
   }
 
+  /** 任务变动后通知原生层：同步角标、撤销过期通知、重排闹钟 */
+  function notifyNative() {
+    if (window.NativeNotify && window.NativeNotify.onTasksChanged) {
+      try { window.NativeNotify.onTasksChanged(); } catch (e) { /* 原生通知失败不影响主流程 */ }
+    }
+  }
+
   const listeners = [];
   function emit() {
     listeners.forEach(function (fn) { try { fn(); } catch (e) { console.warn(e); } });
@@ -355,7 +362,7 @@
   function addTask(patch) {
     const t = taskDefaults(patch);
     state.tasks.unshift(t);
-    save(); emit();
+    save(); emit(); notifyNative();
     return t;
   }
 
@@ -363,13 +370,13 @@
     const t = getTask(id);
     if (!t) return null;
     Object.assign(t, patch);
-    save(); emit();
+    save(); emit(); notifyNative();
     return t;
   }
 
   function removeTask(id) {
     const i = state.tasks.findIndex(function (t) { return t.id === id; });
-    if (i >= 0) { state.tasks.splice(i, 1); save(); emit(); }
+    if (i >= 0) { state.tasks.splice(i, 1); save(); emit(); notifyNative(); }
   }
 
   /** 计算下一次重复的时间 */
@@ -435,7 +442,7 @@
         });
       }
     }
-    save(); emit();
+    save(); emit(); notifyNative();
     return { task: t, spawned: spawned };
   }
 
@@ -451,14 +458,14 @@
     // 已经手动延后过，不再补发提前提醒
     t.fired = { pre: (t.pre || []).slice(), onTime: 0, followUp: 0 };
     t.nextFollowAt = 0;
-    save(); emit();
+    save(); emit(); notifyNative();
     return t;
   }
 
   function resetAll() {
     state = seed();
     state.settings.onboarded = true;
-    save(); emit();
+    save(); emit(); notifyNative();
   }
 
   /* ---------------------------- 外抛 ---------------------------- */
