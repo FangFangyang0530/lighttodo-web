@@ -4,7 +4,7 @@
    =========================================================== */
 'use strict';
 
-const VERSION = 'lighttodo-v6';
+const VERSION = 'lighttodo-v7';
 const SHELL = [
   './',
   './index.html',
@@ -14,6 +14,7 @@ const SHELL = [
   './css/pwa.css',
   './js/store.js',
   './js/persona.js',
+  './js/native-notify.js',
   './js/nlu.js',
   './js/reminder.js',
   './js/chat.js',
