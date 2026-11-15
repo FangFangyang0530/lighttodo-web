@@ -9,7 +9,8 @@
 
   const Chat = {
     pending: null,
-    lastTaskId: null
+    lastTaskId: null,
+    lastDeleted: null
   };
 
   let rendered = new Set();
@@ -416,7 +417,7 @@
         return;
 
       case 'help':
-        botSay('你可以这样说：\n· 明天十点提醒我交高数作业\n· 每周一三五晚八点提醒我背单词\n· 高数作业完成了\n· 延后 10 分钟\n· 改到明晚七点\n· 温柔一点\n· 本周复盘', { chips: ['明天十点提醒我交高数作业', '本周复盘'] });
+        botSay('你可以这样说：\n· 明天十点提醒我交高数作业\n· 每周一三五晚八点提醒我背单词\n· 高数作业完成了\n· 延后 10 分钟\n· 改到明晚七点\n· 把高数作业改名叫交数学作业\n· 每周一三五改成每周二四\n· 提醒提前改成 30 分钟\n· 删除取快递这个任务\n· 温柔一点\n· 本周复盘', { chips: ['明天十点提醒我交高数作业', '删除取快递这个任务', '本周复盘'] });
         return;
 
       case 'greet':
@@ -487,6 +488,70 @@
         });
         Chat.lastTaskId = t.id;
         botSay('改好了：「' + t.title + '」现在是 ' + U.fmtDue(r.dueAt) + '。', { chips: ['完成它', '再延后 10 分钟'] });
+        return;
+      }
+
+      case 'delete': {
+        const t = resolveTask(r.target);
+        if (!t) {
+          botSay('要删除哪一件？告诉我任务名，或者直接说「删除 高数作业」。', { chips: pendingTitles(3) });
+          return;
+        }
+        Chat.lastDeleted = JSON.parse(JSON.stringify(t));
+        Store.removeTask(t.id);
+        if (Chat.lastTaskId === t.id) Chat.lastTaskId = null;
+        botSay('好，已删除「' + t.title + '」。删错了说「撤销删除」，我把它放回来。', { chips: ['撤销删除', '今天还有什么'] });
+        if (window.App) {
+          App.toast('已删除「' + t.title + '」');
+          if (App.refreshBadges) App.refreshBadges();
+        }
+        return;
+      }
+
+      case 'rename': {
+        const t = resolveTask(r.target);
+        if (!t) { botSay('要改哪一件的名字？', { chips: pendingTitles(3) }); return; }
+        const oldTitle = t.title;
+        Store.updateTask(t.id, { title: r.newTitle });
+        Chat.lastTaskId = t.id;
+        botSay('改好了：「' + oldTitle + '」→「' + r.newTitle + '」。', { chips: ['完成它', '改到明天 9 点', '打开清单'] });
+        if (window.App && App.refreshBadges) App.refreshBadges();
+        return;
+      }
+
+      case 'repeat': {
+        const t = resolveTask(r.target);
+        if (!t) { botSay('要改哪一件的提醒频次？', { chips: pendingTitles(3) }); return; }
+        const patch = {
+          repeat: r.repeat || 'none',
+          repeatDays: (r.repeatDays || []).slice(),
+          fired: { pre: [], onTime: 0, followUp: 0 },
+          nextFollowAt: 0
+        };
+        // 改成每周：把下一次时间对齐到最近的重复日，保留原本的时分
+        if (patch.repeat === 'weekly' && patch.repeatDays.length && t.dueAt) {
+          const d = new Date(t.dueAt);
+          const minutes = d.getHours() * 60 + d.getMinutes();
+          for (let i = 0; i < 14; i++) {
+            const cand = U.startOfDay(Date.now()) + i * U.DAY + minutes * U.MIN;
+            if (cand <= Date.now()) continue;
+            if (patch.repeatDays.indexOf(new Date(cand).getDay()) >= 0) { patch.dueAt = cand; break; }
+          }
+        }
+        Store.updateTask(t.id, patch);
+        Chat.lastTaskId = t.id;
+        const label = Store.repeatLabel(Store.getTask(t.id));
+        botSay('好，「' + t.title + '」的提醒频次改成：' + label + '。', { chips: ['完成它', '今天还有什么', '打开清单'] });
+        if (window.App && App.refreshBadges) App.refreshBadges();
+        return;
+      }
+
+      case 'pre': {
+        const t = resolveTask(r.target);
+        if (!t) { botSay('要给哪一件改提前提醒？', { chips: pendingTitles(3) }); return; }
+        Store.updateTask(t.id, { pre: [r.preMin], fired: { pre: [], onTime: 0, followUp: 0 } });
+        Chat.lastTaskId = t.id;
+        botSay('改好了：「' + t.title + '」会提前 ' + r.preMin + ' 分钟提醒你。', { chips: ['完成它', '打开清单'] });
         return;
       }
 
@@ -624,6 +689,19 @@
     '看示例指令': function () { dispatch({ intent: 'help' }, '帮助'); },
     '新建提醒': function () { dispatch({ intent: 'help' }, '帮助'); },
     '再设一个': function () { botSay('好，接着说下一件事。', { chips: defaultChips().slice(0, 3) }); },
+    '撤销删除': function () {
+      const snap = Chat.lastDeleted;
+      if (!snap) { botSay('现在没有可撤销的删除。', { chips: defaultChips().slice(0, 2) }); return; }
+      if (Store.getTask(snap.id)) Store.removeTask(snap.id);
+      const t = Store.addTask(snap);
+      Chat.lastDeleted = null;
+      Chat.lastTaskId = t.id;
+      botSay('已恢复「' + t.title + '」，时间还是 ' + U.fmtDue(t.dueAt) + '。', { chips: ['完成它', '打开清单'] });
+      if (window.App) {
+        App.toast('已撤销删除');
+        if (App.refreshBadges) App.refreshBadges();
+      }
+    },
     '完成它': function () {
       const t = Chat.lastTaskId ? Store.getTask(Chat.lastTaskId) : null;
       if (!t) { botSay('要完成哪一件？说个任务名就行。', { chips: pendingTitles(3) }); return; }
@@ -740,6 +818,9 @@
   /* ------------------------------ 初始化 ------------------------------ */
   Chat.init = function () {
     Store.onChange(function () { if (Chat.refreshCards) Chat.refreshCards(); });
+    window.addEventListener('hashchange', function () {
+      if (document.activeElement && document.activeElement.id === 'chatInput') document.activeElement.blur();
+    });
     const stream = streamEl();
     if (stream) {
       stream.addEventListener('click', function (e) {
@@ -752,6 +833,23 @@
       input.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') { e.preventDefault(); submit(input.value); input.value = ''; }
       });
+
+      /* 键盘弹起时收起底部导航（对话页），键盘关闭后再显现 */
+      const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      const setKb = function (on) { document.body.classList.toggle('kb-open', !!on); };
+      const isPhoneLike = function () { return coarse || window.innerWidth <= 560; };
+      input.addEventListener('focus', function () {
+        if (isPhoneLike()) setKb(true);
+        setTimeout(scrollBottom, 280);
+      });
+      input.addEventListener('blur', function () { setKb(false); });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', function () {
+          if (document.activeElement !== input) return;
+          const shrunk = window.innerHeight - window.visualViewport.height > 120;
+          setKb(shrunk);
+        });
+      }
     }
     setChips();
     render(true);
