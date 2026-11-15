@@ -392,6 +392,12 @@
       items: ['提前 10 分钟先提醒一次', '没完成就按间隔追加', '紧急任务可突破免打扰']
     },
     {
+      title: '免打扰与提示',
+      text: '在「我的 → 通知与免打扰」里统一管理：免打扰时段、默认提前提醒、提示音与振动。装成 App 后还能开启通知栏消息、锁屏提醒与桌面角标，并把自启动打开，不点开应用也能收到提醒。',
+      items: ['免打扰时段：期间的提醒先静默保存，结束后补发', '紧急任务可突破免打扰，重要事不会漏', '通知栏 / 锁屏 / 角标 / 自启动一页里开关'],
+      link: '去通知与免打扰设置看看 →'
+    },
+    {
       title: '不满意，用嘴改',
       text: '「延后 10 分钟」「改到明晚七点」「换成功课提醒更严肃的语气」，都能直接说。',
       items: ['完成 / 延后 / 改时间', '换语气、暂停提醒', '说「本周复盘」看报告']
@@ -418,6 +424,7 @@
         '<div class="ob-dots">' + OB_STEPS.map(function (_, i) {
           return '<i class="' + (i === obStep ? 'on' : '') + '"></i>';
         }).join('') + '</div>' +
+        (step.link ? '<button class="btn btn-ghost ob-link" data-action="obGoNotify">' + esc(step.link) + '</button>' : '') +
         '<div class="ob-actions">' +
           '<button class="btn" data-action="obSkip">跳过</button>' +
           '<button class="btn btn-primary" data-action="' + (isLast ? 'obDone' : 'obNext') + '">' +
@@ -652,6 +659,16 @@
       case 'notifyTest':
         if (window.NativeNotify) NativeNotify.test();
         break;
+      case 'pinWidget':
+        if (!window.NativeNotify || !NativeNotify.isNative) {
+          App.toast('装成 App 后可以把「今日待办」放到桌面');
+          break;
+        }
+        NativeNotify.pinWidget().then(function (res) {
+          if (res && res.ok) App.toast('按桌面提示完成添加即可');
+          else App.toast('请长按桌面空白处，添加「今日待办」小组件');
+        });
+        break;
       case 'notifySettings':
         if (window.NativeNotify) NativeNotify.openSystemSettings();
         break;
@@ -670,6 +687,10 @@
       case 'installApp': App.installApp(); break;
       case 'closeSheet': closeReminder(); break;
       case 'obNext': obStep = Math.min(obStep + 1, OB_STEPS.length - 1); renderOnboarding(); break;
+      case 'obGoNotify':
+        finishOnboarding();
+        App.go('notify');
+        break;
       case 'obSkip':
       case 'obDone': finishOnboarding(); break;
       case 'noop': break;
