@@ -24,7 +24,11 @@
   }
 
   let isNative = !!plugin();
-  let cfg = { bar: true, headsUp: true, lock: true, badge: true, sound: 'default', customName: '', granted: true, exact: true, batteryOpt: false };
+  let cfg = {
+    bar: true, headsUp: true, lock: true, badge: true,
+    sound: 'default', vibe: 'normal', fullscreen: true, canFullscreen: true,
+    customName: '', granted: true, exact: true, batteryOpt: false
+  };
   let lastBadge = -1;
   let posted = {};
   let schedTimer = null;
@@ -185,6 +189,45 @@
     return setConfig({ sound: key });
   }
 
+  /** 震动模式：off / light / normal / strong / pulse */
+  function setVibe(key) {
+    return setConfig({ vibe: key });
+  }
+
+  function setFullscreen(on) {
+    return setConfig({ fullscreen: !!on });
+  }
+
+  /** 全屏提醒页上点的「完成 / 延后」，回到 App 时补执行 */
+  function applyOps() {
+    if (!isNative) return Promise.resolve(0);
+    return call('takeOps').then(function (res) {
+      if (!res || !res.ops) return 0;
+      let list = [];
+      try { list = JSON.parse(res.ops) || []; } catch (e) { return 0; }
+      let done = 0;
+      list.forEach(function (o) {
+        if (!o || !o.id || !window.Store) return;
+        const t = Store.getTask(o.id);
+        if (!t) return;
+        if (o.op === 'complete') {
+          if (window.Chat && Chat.completeFlow) Chat.completeFlow(t, false);
+          else Store.completeTask(t.id);
+          done++;
+        } else if (o.op === 'snooze') {
+          if (window.Chat && Chat.snoozeFlow) Chat.snoozeFlow(t, 10);
+          else Store.snoozeTask(t.id, 10);
+          done++;
+        }
+      });
+      if (done) {
+        if (window.App && App.refreshBadges) App.refreshBadges();
+        if (window.App && App.toast) App.toast('已同步提醒页里的 ' + done + ' 条操作');
+      }
+      return done;
+    });
+  }
+
   function saveCustomSound(name, base64) {
     return call('saveCustomSound', { name: name, data: base64 }).then(function (res) {
       if (res && res.ok) {
@@ -212,15 +255,17 @@
       ensurePermission();
       syncTasks();
       syncSchedule();
+      applyOps();
       setTimeout(syncSchedule, 4000);
     });
   }
 
-  // 回到前台时重算角标与闹钟，避免被系统冻结后计划过期
+  // 回到前台时重算角标与闹钟，并补执行提醒页里点过的操作
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState !== 'visible' || !isNative) return;
     syncTasks();
     scheduleSoon();
+    applyOps();
   });
 
   window.NativeNotify = {
@@ -237,6 +282,11 @@
     refreshConfig: refreshConfig,
     setConfig: setConfig,
     setSound: setSound,
+    setVibe: setVibe,
+    setFullscreen: setFullscreen,
+    previewVibe: function () { return call('previewVibe'); },
+    applyOps: applyOps,
+    openFullScreenSettings: function () { return call('openFullScreenSettings'); },
     saveCustomSound: saveCustomSound,
     ensurePermission: ensurePermission,
     preview: function () { return call('previewSound'); },
