@@ -729,6 +729,22 @@
       case 'notifyPreview':
         if (window.NativeNotify) NativeNotify.preview();
         break;
+      case 'notifyVibe':
+        if (window.NativeNotify) {
+          NativeNotify.setVibe(el.dataset.key).then(function () { Views.notify(); });
+        }
+        break;
+      case 'notifyVibePreview':
+        if (window.NativeNotify) {
+          NativeNotify.previewVibe();
+          App.toast('已按当前震动模式试一下');
+        } else {
+          App.toast('装成 App 后才能设置震动');
+        }
+        break;
+      case 'notifyFullScreenSettings':
+        if (window.NativeNotify) NativeNotify.openFullScreenSettings();
+        break;
       case 'notifyTest':
         if (window.NativeNotify) NativeNotify.test();
         break;
