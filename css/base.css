@@ -207,6 +207,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round
 }
 .btn-primary:hover { color: #fff; filter: brightness(1.03); }
 .btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.btn-danger {
+  border-color: #F1D7D1;
+  background: #FDF3F0;
+  color: var(--danger);
+}
+.btn-danger:hover { border-color: #E7BDB2; color: var(--danger); background: #FBEAE5; }
 
 /* ---------- 卡片 / 列表 ---------- */
 .card {
@@ -385,8 +391,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round
 }
 .tabbar.hidden { display: none; }
 /* 对话页输入中（软键盘弹起）收起底部导航，键盘关闭后由 js 去掉该类 */
+.tabbar.kb-hidden { display: none !important; }
 body.kb-open .tabbar { display: none !important; }
 body.kb-open .chat-composer { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+/* 兜底：万一脚本没执行到，输入框聚焦时也收起（不支持 :has 的旧内核自动忽略） */
+@media (max-width: 560px) {
+  body:has(#chatInput:focus) .tabbar { display: none !important; }
+}
 .tabbar button {
   flex: 1;
   border: none;
@@ -423,6 +434,73 @@ body.kb-open .chat-composer { padding-bottom: calc(8px + env(safe-area-inset-bot
   animation: fadeIn .2s ease both;
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* 应用内确认弹层（删除任务等）：不依赖 WebView 的 confirm */
+.confirm-sheet {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #fff;
+  border-radius: 22px;
+  padding: 20px 18px 14px;
+  box-shadow: var(--shadow-lg);
+  animation: confirmIn .2s ease both;
+}
+@keyframes confirmIn {
+  from { opacity: 0; transform: translateY(-46%) scale(.97); }
+  to { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+.confirm-sheet .cs-title {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--text);
+  margin-bottom: 8px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.confirm-sheet .cs-text {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.confirm-sheet .cs-actions { display: flex; gap: 10px; }
+
+/* 底部撤销条 */
+.snackbar {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 84px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(47, 62, 58, .95);
+  color: #fff;
+  font-size: 12.5px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(47, 62, 58, .3);
+  animation: snackIn .22s ease both;
+  z-index: 85;
+}
+@keyframes snackIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.snackbar-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snackbar-btn {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: #A8E3C9;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 2px 4px;
+  cursor: pointer;
+}
 
 .sheet {
   position: absolute;
