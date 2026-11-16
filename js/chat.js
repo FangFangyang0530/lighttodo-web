@@ -682,6 +682,18 @@
   }
 
   /* ------------------------------ 输入 ------------------------------ */
+  /** 恢复最近一次删除（对话「撤销删除」与清单页撤销按钮共用） */
+  function restoreDeleted() {
+    const snap = Chat.lastDeleted;
+    if (!snap) return null;
+    if (Store.getTask(snap.id)) Store.removeTask(snap.id);
+    const t = Store.addTask(snap);
+    Chat.lastDeleted = null;
+    Chat.lastTaskId = t.id;
+    return t;
+  }
+  Chat.restoreDeleted = restoreDeleted;
+
   const SPECIAL = {
     '打开清单': function () { App.go('list'); },
     '打开复盘页': function () { App.go('review'); },
@@ -690,12 +702,8 @@
     '新建提醒': function () { dispatch({ intent: 'help' }, '帮助'); },
     '再设一个': function () { botSay('好，接着说下一件事。', { chips: defaultChips().slice(0, 3) }); },
     '撤销删除': function () {
-      const snap = Chat.lastDeleted;
-      if (!snap) { botSay('现在没有可撤销的删除。', { chips: defaultChips().slice(0, 2) }); return; }
-      if (Store.getTask(snap.id)) Store.removeTask(snap.id);
-      const t = Store.addTask(snap);
-      Chat.lastDeleted = null;
-      Chat.lastTaskId = t.id;
+      const t = restoreDeleted();
+      if (!t) { botSay('现在没有可撤销的删除。', { chips: defaultChips().slice(0, 2) }); return; }
       botSay('已恢复「' + t.title + '」，时间还是 ' + U.fmtDue(t.dueAt) + '。', { chips: ['完成它', '打开清单'] });
       if (window.App) {
         App.toast('已撤销删除');
@@ -834,22 +842,36 @@
         if (e.key === 'Enter') { e.preventDefault(); submit(input.value); input.value = ''; }
       });
 
-      /* 键盘弹起时收起底部导航（对话页），键盘关闭后再显现 */
+      /* 键盘弹起时收起底部导航（对话页），键盘关闭后再显现。
+         主信号看输入框焦点：手机上 focus 就等于键盘弹起，不依赖各内核是否上报
+         visualViewport 高度；同时给 #tabbar 直接加 kb-hidden，避免样式继承被覆盖。 */
       const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-      const setKb = function (on) { document.body.classList.toggle('kb-open', !!on); };
+      const tabbarEl = document.getElementById('tabbar');
+      const setKb = function (on) {
+        const open = !!on;
+        document.body.classList.toggle('kb-open', open);
+        if (tabbarEl) tabbarEl.classList.toggle('kb-hidden', open);
+      };
       const isPhoneLike = function () { return coarse || window.innerWidth <= 560; };
+      const syncKb = function () {
+        setKb(isPhoneLike() && document.activeElement === input);
+      };
       input.addEventListener('focus', function () {
-        if (isPhoneLike()) setKb(true);
+        syncKb();
+        /* 键盘动画完成后补一次，顺便把对话滚动到底 */
+        setTimeout(syncKb, 120);
+        setTimeout(syncKb, 420);
         setTimeout(scrollBottom, 280);
       });
-      input.addEventListener('blur', function () { setKb(false); });
+      input.addEventListener('blur', function () { setTimeout(syncKb, 180); });
+      window.addEventListener('resize', function () { setTimeout(syncKb, 60); });
       if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', function () {
-          if (document.activeElement !== input) return;
-          const shrunk = window.innerHeight - window.visualViewport.height > 120;
-          setKb(shrunk);
-        });
+        window.visualViewport.addEventListener('resize', function () { setTimeout(syncKb, 60); });
+        window.visualViewport.addEventListener('scroll', function () { setTimeout(syncKb, 60); });
       }
+      window.addEventListener('orientationchange', function () {
+        setTimeout(function () { setKb(false); }, 350);
+      });
     }
     setChips();
     render(true);
