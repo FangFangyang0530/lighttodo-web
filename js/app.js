@@ -121,6 +121,54 @@
     toastTimer = setTimeout(function () { el.remove(); }, 2200);
   };
 
+  /* ------------------------------ 确认弹层与撤销条 ------------------------------ */
+  App.closeLayer = function () {
+    const layer = document.getElementById('layer');
+    if (layer) layer.innerHTML = '';
+  };
+
+  /** 底部撤销条：删除后 6 秒内可一键找回 */
+  App.snackbar = function (text, actionLabel, onAct) {
+    const layer = document.getElementById('layer');
+    if (!layer) return;
+    const old = layer.querySelector('.snackbar');
+    if (old) old.remove();
+    const el = document.createElement('div');
+    el.className = 'snackbar';
+    const span = document.createElement('span');
+    span.className = 'snackbar-text';
+    span.textContent = text;
+    el.appendChild(span);
+    if (actionLabel) {
+      const btn = document.createElement('button');
+      btn.className = 'snackbar-btn';
+      btn.textContent = actionLabel;
+      btn.addEventListener('click', function () {
+        el.remove();
+        if (typeof onAct === 'function') onAct();
+      });
+      el.appendChild(btn);
+    }
+    layer.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.remove(); }, 6000);
+  };
+
+  /** 应用内删除确认：不依赖 WebView 的 confirm，各端表现一致 */
+  App.confirmDeleteTask = function (task) {
+    const layer = document.getElementById('layer');
+    if (!layer) return;
+    layer.innerHTML = '' +
+      '<div class="mask" data-action="closeLayer"></div>' +
+      '<div class="confirm-sheet">' +
+        '<div class="cs-title">删除「' + esc(task.title) + '」？</div>' +
+        '<div class="cs-text">删除后 6 秒内可以点「撤销」，也可以在对话里说「撤销删除」找回。</div>' +
+        '<div class="cs-actions">' +
+          '<button class="btn btn-ghost" data-action="closeLayer">再想想</button>' +
+          '<button class="btn btn-danger" data-action="deleteTaskConfirm" data-id="' + task.id + '">删除</button>' +
+        '</div>' +
+      '</div>';
+  };
+
   /* ------------------------------ 新建任务 ------------------------------ */
   App.openNewTask = function () { App.go('task', 'new'); };
 
@@ -536,13 +584,38 @@
       case 'snoozeTask':
         if (task) Chat.snoozeFlow(task, 10);
         break;
-      case 'deleteTask':
-        if (task && confirm('删除「' + task.title + '」？此操作不可撤销。')) {
-          Store.removeTask(task.id);
-          App.toast('已删除');
-          App.go('list');
+      case 'deleteTask': {
+        /* 依次尝试：按钮自带的 data-id → 当前路由 → 详情页正在编辑的任务 */
+        let target = task;
+        if (!target) {
+          const r = parseHash();
+          if (r.name === 'task' && r.arg && r.arg !== 'new') target = Store.getTask(r.arg);
         }
+        if (!target && window.Views && Views.currentTaskId) target = Store.getTask(Views.currentTaskId);
+        if (!target) { App.toast('这个任务已经不在了'); App.go('list'); break; }
+        App.confirmDeleteTask(target);
         break;
+      }
+      case 'deleteTaskConfirm': {
+        const t = task || (id ? Store.getTask(id) : null);
+        if (!t) { App.closeLayer(); App.toast('任务已经不在了'); App.go('list'); break; }
+        Chat.lastDeleted = JSON.parse(JSON.stringify(t));
+        Store.removeTask(t.id);
+        if (Chat.lastTaskId === t.id) Chat.lastTaskId = null;
+        App.closeLayer();
+        App.go('list');
+        if (App.refreshBadges) App.refreshBadges();
+        App.snackbar('已删除「' + t.title + '」', '撤销', function () {
+          const back = Chat.restoreDeleted ? Chat.restoreDeleted() : null;
+          if (back) {
+            App.toast('已恢复「' + back.title + '」');
+            App.go('list');
+            if (App.refreshBadges) App.refreshBadges();
+          }
+        });
+        break;
+      }
+      case 'closeLayer': App.closeLayer(); break;
       case 'saveTask': Views.saveTask(); break;
       case 'setRepeat': Views.setRepeat(el.dataset.repeat); break;
       case 'toggleRepeatDay': Views.toggleRepeatDay(el.dataset.day); break;
