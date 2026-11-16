@@ -159,20 +159,22 @@
   Views.task = function (id) {
     const body = document.getElementById('taskBody');
     if (!body) return;
+    /* 头部的「删除」按钮只在任务详情页出现，并直接绑定当前任务 id */
+    const delBtn = document.querySelector('[data-action="deleteTask"]');
     let source;
     if (id === 'new') {
       source = newTaskDraft();
       edit = { id: 'new', data: source, task: null };
+      Views.currentTaskId = null;
       document.getElementById('taskHeadTitle').textContent = '新建任务';
-      const del = document.querySelector('[data-action="deleteTask"]');
-      if (del) del.hidden = true;
+      if (delBtn) { delBtn.hidden = true; delBtn.dataset.id = ''; }
     } else {
       const t = Store.getTask(id);
       if (!t) { App.go('list'); return; }
       edit = { id: id, data: JSON.parse(JSON.stringify(t)), task: t };
+      Views.currentTaskId = id;
       document.getElementById('taskHeadTitle').textContent = '任务详情';
-      const del = document.querySelector('[data-action="deleteTask"]');
-      if (del) del.hidden = false;
+      if (delBtn) { delBtn.hidden = false; delBtn.dataset.id = id; }
     }
     renderTaskForm();
   };
